@@ -36,6 +36,10 @@ jobs:
     - name: Remove Android 31 (S)
       run: $ANDROID_HOME/tools/bin/sdkmanager --uninstall "platforms;android-31"
       working-directory: ${{env.working-directory}}
+      
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+      working-directory: ${{env.working-directory}}
 
     - name: Build with Gradle
       run: ./gradlew qa
