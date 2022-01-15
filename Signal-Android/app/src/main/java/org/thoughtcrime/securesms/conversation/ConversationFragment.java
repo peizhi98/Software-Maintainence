@@ -841,6 +841,20 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
     }
   }
 
+  private void handleAudioTextConversion(ConversationMessage conversationMessage) {
+    AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+//    builder.setTitle(R.string.ConversationFragment_save_to_sd_card);
+    builder.setTitle("Convert message");
+    builder.setCancelable(true);
+//    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
+//            count, count));
+    builder.setMessage("body");
+//    builder.setPositiveButton(R.string.yes, onAcceptListener);
+    builder.setPositiveButton(R.string.yes, null);
+    builder.setNegativeButton(R.string.no, null);
+    builder.show();
+  }
+
   private void handleDeleteMessages(final Set<MultiselectPart> multiselectParts) {
     Set<MessageRecord> messageRecords = Stream.of(multiselectParts).map(MultiselectPart::getMessageRecord).collect(Collectors.toSet());
     buildRemoteDeleteConfirmationDialog(messageRecords).show();
@@ -1343,6 +1357,14 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
           (!recipient.get().isGroup() || recipient.get().isActiveGroup()) &&
           ((ConversationAdapter) list.getAdapter()).getSelectedItems().isEmpty())
       {
+//        Menu menu=actionMode.getMenu();
+//        if(!((MediaMmsMessageRecord)messageRecord).getSlideDeck().getSlides().isEmpty()){
+//          menu.findItem(R.id.action_convert_audio).setVisible(true);
+//        }else{
+//          menu.findItem(R.id.action_convert_audio).setVisible(false);
+//        }
+//        AdaptiveActionsToolbar.adjustMenuActions(menu, 10, requireActivity().getWindow().getDecorView().getMeasuredWidth());
+
         multiselectItemDecoration.setFocusedItem(new MultiselectPart.Message(item.getConversationMessage()));
         list.invalidateItemDecorations();
 
@@ -1791,6 +1813,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
     public boolean onMenuItemClick(MenuItem item) {
       switch (item.getItemId()) {
         case R.id.action_info:        handleDisplayDetails(conversationMessage);                                            return true;
+        case R.id.action_convert_audio:handleAudioTextConversion(conversationMessage);                                      return true;
         case R.id.action_delete:      handleDeleteMessages(conversationMessage.getMultiselectCollection().toSet());         return true;
         case R.id.action_copy:        handleCopyMessage(conversationMessage.getMultiselectCollection().toSet());            return true;
         case R.id.action_reply:       handleReplyMessage(conversationMessage);                                              return true;
