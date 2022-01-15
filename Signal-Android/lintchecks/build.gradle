@@ -18,5 +18,5 @@ jar {
         attributes('Lint-Registry-v2': 'org.signal.lint.Registry')
     }
 }
-sourceCompatibility = JavaVersion
-targetCompatibility = JavaVersion
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
