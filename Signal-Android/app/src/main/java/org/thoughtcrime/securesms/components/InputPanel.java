@@ -96,7 +96,7 @@ public class InputPanel extends LinearLayout
   private boolean hideForGroupState;
   private boolean hideForBlockedState;
   private boolean hideForSearch;
-
+  private boolean hideForSelection;
   private ConversationStickerSuggestionAdapter stickerSuggestionAdapter;
 
   public InputPanel(Context context) {
@@ -335,6 +335,11 @@ public class InputPanel extends LinearLayout
     this.hideForSearch = hideForSearch;
     updateVisibility();
   }
+  
+  public void setHideForSelection(boolean hideForSelection) {
+    this.hideForSelection = hideForSelection;
+    updateVisibility();
+  }
 
   @Override
   public void onRecordPermissionRequired() {
@@ -515,7 +520,7 @@ public class InputPanel extends LinearLayout
   }
 
   private void updateVisibility() {
-    if (hideForGroupState || hideForBlockedState || hideForSearch) {
+    if (hideForGroupState || hideForBlockedState || hideForSearch|| hideForSelection) {
       setVisibility(GONE);
     } else {
       setVisibility(VISIBLE);
