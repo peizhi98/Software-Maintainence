@@ -3774,6 +3774,11 @@ public class ConversationActivity extends PassphraseRequiredActivity
   public void onMessageActionToolbarOpened() {
     searchViewItem.collapseActionView();
   }
+  
+   @Override
+  public void onBottomActionBarVisibilityChanged(int visibility) {
+    inputPanel.setHideForSelection(visibility == View.VISIBLE);
+  }
 
   @Override
   public void onForwardClicked()  {
