@@ -31,6 +31,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
+import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -64,13 +65,18 @@ import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
 
 import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
+import com.google.android.gms.common.util.Base64Utils;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.signal.core.util.concurrent.SignalExecutors;
 import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.PassphraseRequiredActivity;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.media.DecryptableUriMediaInput;
+import org.thoughtcrime.securesms.media.MediaInput;
 import org.thoughtcrime.securesms.util.JsonUtils;
 import org.thoughtcrime.securesms.verify.VerifyIdentityActivity;
 import org.thoughtcrime.securesms.components.ConversationScrollToView;
@@ -167,8 +173,14 @@ import org.thoughtcrime.securesms.util.views.AdaptiveActionsToolbar;
 import org.thoughtcrime.securesms.wallpaper.ChatWallpaper;
 import org.whispersystems.libsignal.util.guava.Optional;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -176,9 +188,12 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
+import ezvcard.util.IOUtils;
 import kotlin.Unit;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
@@ -850,42 +865,81 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
     AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
 //    builder.setTitle(R.string.ConversationFragment_save_to_sd_card);
 
-//    try {
-//      HttpClient httpclient = new DefaultHttpClient();
-//
-//      HttpPost post = new HttpPost("https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E");
-//      StringEntity params = new StringEntity("details=\"{\\\"audio\\\": { \\\"content\\\": \\\"\\\"},\\\"config\\\": {\\\"enableAutomaticPunctuation\\\": true,\\\"encoding\\\":\\\"ENCODING_UNSPECIFIED\\\",\\\"languageCode\\\": \\\"en-US\\\",\\\"model\\\": \\\"default\\\"}}\" ");
-//      post.setEntity(params);
-//
-//      HttpResponse response = httpclient.execute(post);
-//      StatusLine statusLine = response.getStatusLine();
-//      if(statusLine.getStatusCode() == HttpStatus.SC_OK){
-//        ByteArrayOutputStream out = new ByteArrayOutputStream();
-//        response.getEntity().writeTo(out);
-//        String responseString = out.toString();
-//        out.close();
-//        System.out.println(responseString);
-//      } else{
-//        //Closes the connection.
-//        response.getEntity().getContent().close();
-//        throw new IOException(statusLine.getReasonPhrase());
-//      }
-//    }catch (Exception e){
-//      Log.w(TAG, e);
-//    }
-
     new ProgressDialogAsyncTask<Void, Void, String>(getActivity() , null , null)
     {
 
-//      String responseString = "";
       @Override
       protected String doInBackground(Void... params) {
         try {
           System.out.println("Entering GCP API call");
-          String url = "https://random.justyy.workers.dev/api/random/?cached&n=128";
-//          String url = "https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E";
+//          String url = "https://random.justyy.workers.dev/api/random/?cached&n=128";
+          String ljwKey = getContext().getResources().getString(R.string.Google_API_Key_LJW);
+          String url = "https://speech.googleapis.com/v1/speech:recognize?key="+ljwKey;
+          System.out.println("API URL : "+url);
+//          String encodedfile = "";
 
-          Request request = new Request.Builder().url(url).build();
+          Uri uri = ((MediaMmsMessageRecord) conversationMessage.getMessageRecord()).getSlideDeck().getAudioSlide().getUri();
+
+          String base64File = "";
+
+          System.out.println("has audio : "+((MediaMmsMessageRecord) conversationMessage.getMessageRecord()).getSlideDeck().getAudioSlide().hasAudio());
+
+
+//          File file = new File(uri.getPath());
+
+
+          try ( InputStream imageInFile = PartAuthority.getAttachmentStream(requireContext(), uri);) {
+            // Reading a file from file system
+
+            byte[] bytes = IOUtils.toByteArray(imageInFile);
+
+
+
+//            byte[] fileData = new byte[(int) file.length()];
+//            imageInFile.read(fileData);
+//            base64File = Base64.encodeBytes(bytes);
+            base64File = Base64.encodeToString(bytes,0);
+
+
+
+          } catch (FileNotFoundException e) {
+            System.out.println("File not found" + e);
+          } catch (IOException ioe) {
+            System.out.println("Exception while reading the file " + ioe);
+          }
+//          System.out.println("file uri : "+file.exists() + "  "+file.getAbsolutePath());
+          System.out.println("Path : "+uri.getPath());
+          System.out.println("base64File : "+base64File);
+
+//          File file = new File("C:\\Users\\jwlim\\Documents\\Software-Maintainence\\Signal-Android\\app\\sampledata\\sample-0.mp3");
+//          FileInputStream fileInputStreamReader = new FileInputStream(file);
+//          byte[] bytes = new byte[(int)file.length()];
+//          fileInputStreamReader.read(bytes);
+//          File file = new File(path);
+//          System.out.println("File exist : "+file.exists());
+//          System.out.println("File path : "+file.getAbsolutePath());
+//          byte[] buffer = new byte[(int) file.length() + 100];
+//          @SuppressWarnings("resource")
+//          int length = new FileInputStream(file).read(buffer);
+//          encodedfile = Base64.encodeToString(buffer, 0, length,
+//                  Base64.DEFAULT);
+
+
+
+          JSONObject obj = new JSONObject();
+          obj.put("audio", new JSONObject().put("content", base64File));
+          obj.put("config", new JSONObject()
+                  .put("enableAutomaticPunctuation", true)
+                  .put("encoding", "ENCODING_UNSPECIFIED")
+                  .put("languageCode", "en-US")
+                  .put("model", "default")
+          );
+          MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+          RequestBody body = RequestBody.create(JSON , String.valueOf(obj));
+
+          System.out.println(obj.toString());
+
+          Request request = new Request.Builder().url(url).post(body).build();
           OkHttpClient client = new OkHttpClient();
           try (Response response = client.newCall(request).execute()) {
 
@@ -899,18 +953,17 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
             String convertText = response.body().string();
             if (convertText.isEmpty()) {
-              return "null";
+              return "Response is empty";
             }
 
             return convertText;
 
           }
 
-        } catch (IOException e) {
+        } catch (Exception e) {
           Log.w(TAG, e);
-          return "false";
+          return "Error translating";
         }
-
       }
 
       @Override
