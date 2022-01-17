@@ -108,10 +108,8 @@ class MultiselectItemDecoration(
   override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
     val currentSelection = getCurrentSelection(parent)
     if (selectedParts.isEmpty() && currentSelection.isNotEmpty()) {
-      val wasRunning = enterExitAnimation?.isRunning ?: false
       enterExitAnimation?.end()
-      val startValue = if (wasRunning) enterExitAnimation?.animatedFraction else 0f
-      enterExitAnimation = ValueAnimator.ofFloat(startValue ?: 0f, 1f).apply {  
+      enterExitAnimation = ValueAnimator.ofFloat(enterExitAnimation?.animatedFraction ?: 0f, 1f).apply {
         duration = 150L
         start()
       }
@@ -144,10 +142,7 @@ class MultiselectItemDecoration(
 
     if (adapter.selectedItems.isEmpty()) {
       drawFocusShadeUnderIfNecessary(canvas, parent)
-        
-      if (enterExitAnimation == null || !isInitialAnimation()) {
-        return
-      }
+      return
     }
 
     shadePaint.color = when {
@@ -194,9 +189,7 @@ class MultiselectItemDecoration(
       canvas.restore()
     }
 
-     if (adapter.selectedItems.isNotEmpty()) {
-      drawChecks(parent, canvas, adapter)
-    }
+    drawChecks(parent, canvas, adapter)
   }
 
   /**
@@ -319,8 +312,7 @@ class MultiselectItemDecoration(
     val adapter = parent.adapter as ConversationAdapter
     val isLtr = ViewUtil.isLtr(child)
 
-    val isAnimatingSelection = enterExitAnimation != null && isInitialAnimation()
-    if ((isAnimatingSelection || adapter.selectedItems.isNotEmpty()) && child is Multiselectable) {
+    if (adapter.selectedItems.isNotEmpty() && child is Multiselectable) {
       val target = child.getHorizontalTranslationTarget()
 
       if (target != null) {
@@ -331,7 +323,7 @@ class MultiselectItemDecoration(
         }
 
         val translation: Float = if (isInitialAnimation()) {
-          max(0, gutter - start) * (enterExitAnimation?.animatedValue as Float? ?: 1f)
+          max(0, gutter - start) * (enterExitAnimation?.animatedFraction ?: 1f)
         } else {
           max(0, gutter - start).toFloat()
         }
