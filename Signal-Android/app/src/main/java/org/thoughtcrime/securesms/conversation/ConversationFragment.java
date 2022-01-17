@@ -71,6 +71,7 @@ import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.PassphraseRequiredActivity;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.util.JsonUtils;
 import org.thoughtcrime.securesms.verify.VerifyIdentityActivity;
 import org.thoughtcrime.securesms.components.ConversationScrollToView;
 import org.thoughtcrime.securesms.components.ConversationTypingView;
@@ -176,6 +177,10 @@ import java.util.Objects;
 import java.util.Set;
 
 import kotlin.Unit;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 @SuppressLint("StaticFieldLeak")
 public class ConversationFragment extends LoggingFragment implements MultiselectForwardFragment.Callback {
@@ -841,6 +846,103 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
     }
   }
 
+  private void handleAudioTextConversion(ConversationMessage conversationMessage) {
+    AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+//    builder.setTitle(R.string.ConversationFragment_save_to_sd_card);
+
+//    try {
+//      HttpClient httpclient = new DefaultHttpClient();
+//
+//      HttpPost post = new HttpPost("https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E");
+//      StringEntity params = new StringEntity("details=\"{\\\"audio\\\": { \\\"content\\\": \\\"\\\"},\\\"config\\\": {\\\"enableAutomaticPunctuation\\\": true,\\\"encoding\\\":\\\"ENCODING_UNSPECIFIED\\\",\\\"languageCode\\\": \\\"en-US\\\",\\\"model\\\": \\\"default\\\"}}\" ");
+//      post.setEntity(params);
+//
+//      HttpResponse response = httpclient.execute(post);
+//      StatusLine statusLine = response.getStatusLine();
+//      if(statusLine.getStatusCode() == HttpStatus.SC_OK){
+//        ByteArrayOutputStream out = new ByteArrayOutputStream();
+//        response.getEntity().writeTo(out);
+//        String responseString = out.toString();
+//        out.close();
+//        System.out.println(responseString);
+//      } else{
+//        //Closes the connection.
+//        response.getEntity().getContent().close();
+//        throw new IOException(statusLine.getReasonPhrase());
+//      }
+//    }catch (Exception e){
+//      Log.w(TAG, e);
+//    }
+
+    new ProgressDialogAsyncTask<Void, Void, String>(getActivity() , null , null)
+    {
+
+//      String responseString = "";
+      @Override
+      protected String doInBackground(Void... params) {
+        try {
+          System.out.println("Entering GCP API call");
+          String url = "https://random.justyy.workers.dev/api/random/?cached&n=128";
+//          String url = "https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E";
+
+          Request request = new Request.Builder().url(url).build();
+          OkHttpClient client = new OkHttpClient();
+          try (Response response = client.newCall(request).execute()) {
+
+            if (!response.isSuccessful()) {
+              throw new IOException("Unexpected code " + response);
+            }
+
+            if (response.body() == null) {
+              throw new IOException("Response body was not present");
+            }
+
+            String convertText = response.body().string();
+            if (convertText.isEmpty()) {
+              return "null";
+            }
+
+            return convertText;
+
+          }
+
+        } catch (IOException e) {
+          Log.w(TAG, e);
+          return "false";
+        }
+
+      }
+
+      @Override
+      protected void onPostExecute(String result) {
+        super.onPostExecute(result);
+        if (!result.isEmpty()) {
+            builder.setTitle("Convert message");
+            builder.setCancelable(true);
+//    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
+//            count, count));
+            builder.setMessage(result);
+//    builder.setPositiveButton(R.string.yes, onAcceptListener);
+            builder.setPositiveButton(R.string.yes, null);
+            builder.setNegativeButton(R.string.no, null);
+            builder.show();
+        } else {
+          Toast.makeText(getActivity(), R.string.DeviceListActivity_network_failed, Toast.LENGTH_LONG).show();
+        }
+      }
+    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+
+//    builder.setTitle("Convert message");
+//    builder.setCancelable(true);
+////    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
+////            count, count));
+//    builder.setMessage("body");
+////    builder.setPositiveButton(R.string.yes, onAcceptListener);
+//    builder.setPositiveButton(R.string.yes, null);
+//    builder.setNegativeButton(R.string.no, null);
+//    builder.show();
+  }
+
   private void handleDeleteMessages(final Set<MultiselectPart> multiselectParts) {
     Set<MessageRecord> messageRecords = Stream.of(multiselectParts).map(MultiselectPart::getMessageRecord).collect(Collectors.toSet());
     buildRemoteDeleteConfirmationDialog(messageRecords).show();
@@ -1343,6 +1445,14 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
           (!recipient.get().isGroup() || recipient.get().isActiveGroup()) &&
           ((ConversationAdapter) list.getAdapter()).getSelectedItems().isEmpty())
       {
+//        Menu menu=actionMode.getMenu();
+//        if(!((MediaMmsMessageRecord)messageRecord).getSlideDeck().getSlides().isEmpty()){
+//          menu.findItem(R.id.action_convert_audio).setVisible(true);
+//        }else{
+//          menu.findItem(R.id.action_convert_audio).setVisible(false);
+//        }
+//        AdaptiveActionsToolbar.adjustMenuActions(menu, 10, requireActivity().getWindow().getDecorView().getMeasuredWidth());
+
         multiselectItemDecoration.setFocusedItem(new MultiselectPart.Message(item.getConversationMessage()));
         list.invalidateItemDecorations();
 
@@ -1791,6 +1901,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
     public boolean onMenuItemClick(MenuItem item) {
       switch (item.getItemId()) {
         case R.id.action_info:        handleDisplayDetails(conversationMessage);                                            return true;
+        case R.id.action_convert_audio:handleAudioTextConversion(conversationMessage);                                      return true;
         case R.id.action_delete:      handleDeleteMessages(conversationMessage.getMultiselectCollection().toSet());         return true;
         case R.id.action_copy:        handleCopyMessage(conversationMessage.getMultiselectCollection().toSet());            return true;
         case R.id.action_reply:       handleReplyMessage(conversationMessage);                                              return true;
