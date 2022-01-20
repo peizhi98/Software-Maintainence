@@ -68,6 +68,7 @@ import com.annimon.stream.Stream;
 import com.google.android.gms.common.util.Base64Utils;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.signal.core.util.concurrent.SignalExecutors;
@@ -179,6 +180,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -897,13 +899,14 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
             OutputStream os = new FileOutputStream(targetFile);
             os.write(bytes);
             os.close();
-            base64File = Base64.encodeToString(bytes,0);
+//            base64File = Base64.encodeToString(bytes,0);
 
           } catch (FileNotFoundException e) {
             System.out.println("File not found" + e);
           } catch (IOException ioe) {
             System.out.println("Exception while reading the file " + ioe);
           }
+
           OkHttpClient client = new OkHttpClient().newBuilder()
                   .build();
           RequestBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -920,11 +923,13 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
           try (Response response = client.newCall(request).execute();) {
             String convertText = response.body().string();
+
             if (convertText.isEmpty()) {
               return "Response is empty";
             }
             JSONObject uploadResult = new JSONObject(convertText);
             String id = uploadResult.getString("id");
+            System.out.println("conversionId: " + id);
             String key = uploadResult.getString("key");
 
             Request checkStatusRequest = new Request.Builder()
@@ -933,23 +938,41 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                     .get()
                     .build();
             String status = "";
+
             while(true){
               try(Response checkStatusResponse = client.newCall(checkStatusRequest).execute()){
                 JSONObject statusResult = new JSONObject(checkStatusResponse.body().string());
                 status = statusResult.getString("status");
+                System.out.println("Status of getting conversion: " + status);
+
                 if(status.equals("successful")){
+
+                  JSONArray targetFiles = statusResult.getJSONArray("target_files");
+                  String idForAudioRetriever = targetFiles.getJSONObject(0).getString("id");
+                  System.out.println("idForAudioRetriever: " + idForAudioRetriever);
+
                   Request getFileRequest = new Request.Builder()
-                          .url("https://sandbox.zamzar.com/v1/files/"+id+"/content")
+                          .url("https://sandbox.zamzar.com/v1/files/"+idForAudioRetriever+"/content")
                           .method("GET", null)
                           .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
                           .build();
+
                   try(Response getFileResponse = client.newCall(getFileRequest).execute();) {
-                    String fileResponse= getFileResponse.body().toString();
-                    JSONObject fileResponseJson = new JSONObject(fileResponse);
-                    String audio = fileResponseJson.getString("audio");
-                    JSONObject audioJson = new JSONObject(audio);
-                    String content = audioJson.getString("content");
-                    System.out.println(content);
+                    MediaType audioType = getFileResponse.body().contentType();
+                    System.out.println("audioType: " + audioType);
+                    byte[] fileResponse= getFileResponse.body().bytes();
+
+                    if (!getFileResponse.isSuccessful()) {
+                      throw new IOException("Unexpected code " + getFileResponse);
+                    }
+
+                    if (getFileResponse.body() == null) {
+                      throw new IOException("Response body was not present");
+                    }
+
+                    base64File = Base64.encodeToString(fileResponse, 0);
+                    System.out.println("base64File: "+ base64File);
+
                   }
                   break;
                 }
