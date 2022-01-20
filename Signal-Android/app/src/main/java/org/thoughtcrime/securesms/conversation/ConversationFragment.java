@@ -68,6 +68,7 @@ import com.annimon.stream.Stream;
 import com.google.android.gms.common.util.Base64Utils;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.signal.core.util.concurrent.SignalExecutors;
@@ -199,6 +200,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.BufferedSource;
 
 @SuppressLint("StaticFieldLeak")
 public class ConversationFragment extends LoggingFragment implements MultiselectForwardFragment.Callback {
@@ -876,8 +878,9 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
         try {
           System.out.println("Entering GCP API call");
 //          String url = "https://random.justyy.workers.dev/api/random/?cached&n=128";
-          String ljwKey = getContext().getResources().getString(R.string.Google_API_Key_LJW);
-          String url = "https://speech.googleapis.com/v1/speech:recognize?key="+ljwKey;
+          String googleKey = getContext().getResources().getString(R.string.Google_API_Key_OPZ);
+          String zamzarKey = getContext().getResources().getString(R.string.Zamzar_API_Key_SV);
+          String url = "https://speech.googleapis.com/v1/speech:recognize?key="+googleKey;
           System.out.println("API URL : "+url);
 //          String encodedfile = "";
 
@@ -897,7 +900,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
             OutputStream os = new FileOutputStream(targetFile);
             os.write(bytes);
             os.close();
-            base64File = Base64.encodeToString(bytes,0);
+
 
           } catch (FileNotFoundException e) {
             System.out.println("File not found" + e);
@@ -912,10 +915,11 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                   .addFormDataPart("target_format","flac")
                   .build();
 
+          String zamzarAuthorization="Basic "+zamzarKey;
           Request request = new Request.Builder()
                   .url("https://api.zamzar.com/v1/jobs")
                   .method("POST", body)
-                  .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
+                  .addHeader("Authorization", zamzarAuthorization)
                   .build();
 
           try (Response response = client.newCall(request).execute();) {
@@ -929,7 +933,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
             Request checkStatusRequest = new Request.Builder()
                     .url("https://api.zamzar.com/v1/jobs/"+id)
-                    .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
+                    .addHeader("Authorization", zamzarAuthorization)
                     .get()
                     .build();
             String status = "";
@@ -938,18 +942,20 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                 JSONObject statusResult = new JSONObject(checkStatusResponse.body().string());
                 status = statusResult.getString("status");
                 if(status.equals("successful")){
+                  JSONArray fileJsonArray=statusResult.getJSONArray("target_files");
+                  String fileId=fileJsonArray.getJSONObject(0).getString("id");
                   Request getFileRequest = new Request.Builder()
-                          .url("https://sandbox.zamzar.com/v1/files/"+id+"/content")
+                          .url("https://sandbox.zamzar.com/v1/files/"+fileId+"/content")
                           .method("GET", null)
-                          .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
+                          .addHeader("Authorization", zamzarAuthorization)
                           .build();
                   try(Response getFileResponse = client.newCall(getFileRequest).execute();) {
                     String fileResponse= getFileResponse.body().toString();
-                    JSONObject fileResponseJson = new JSONObject(fileResponse);
-                    String audio = fileResponseJson.getString("audio");
-                    JSONObject audioJson = new JSONObject(audio);
-                    String content = audioJson.getString("content");
-                    System.out.println(content);
+                    BufferedSource a=getFileResponse.body().source();
+                    byte[] aa=getFileResponse.body().source().readByteArray();
+                    base64File = Base64.encodeToString(aa,0);
+                    base64File = base64File.replace("\n", "").replace("\r", "");
+                    System.out.println("");
                   }
                   break;
                 }
@@ -970,12 +976,32 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                   .put("languageCode", "en-US")
                   .put("model", "default")
           );
-          MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-          RequestBody transcriptBody = RequestBody.create(JSON , String.valueOf(obj));
-
+          MediaType JSON = MediaType.parse("application/json");
+          String abc=String.valueOf(obj);
+          abc = abc.replace("\n", "").replace("\r", "");
+          RequestBody transcriptBody = RequestBody.create(JSON , abc);
+//          String transcriptBodyString="{\n" +
+//                  "    \"audio\": {\n" +
+//                  "        \"content\": \""+base64File+"\"\n" +
+//                  "    },\n" +
+//                  "    \"config\": {\n" +
+//                  "        \"enableAutomaticPunctuation\": true,\n" +
+//                  "    \"encoding\": \"ENCODING_UNSPECIFIED\",\n" +
+//                  "    \"languageCode\": \"en-US\",\n" +
+//                  "    \"model\": \"default\"\n" +
+//                  "    }\n" +
+//                  "}";
+//          RequestBody transcriptBody = RequestBody.create(JSON,transcriptBodyString);
+          System.out.println(base64File);
           System.out.println(obj.toString());
 
-          Request transcriptRequest = new Request.Builder().url(url).post(transcriptBody).build();
+          Request transcriptRequest
+                  = new Request.Builder()
+                  .url(url)
+                  .post(transcriptBody)
+                  .build();
+          String a=transcriptRequest.body().toString();
+          String aa=transcriptBody.toString();
           try (Response response = client.newCall(transcriptRequest).execute()) {
 
             if (!response.isSuccessful()) {
@@ -990,8 +1016,11 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
             if (convertText.isEmpty()) {
               return "Response is empty";
             }
-
-            return convertText;
+            JSONObject textResponse = new JSONObject(convertText);
+            JSONObject resultJson=textResponse.getJSONArray("results").getJSONObject(0);
+            JSONObject alternativeJson=resultJson.getJSONArray("alternatives").getJSONObject(0);
+            String text=alternativeJson.getString("transcript");
+            return text;
 
           }
 

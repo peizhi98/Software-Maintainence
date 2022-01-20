@@ -10,4 +10,12 @@
 
     <!--    jwlim-->
     <string name="Google_API_Key_LJW" translatable="false">AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E</string>
+    <!--    opz-->
+    <string name="Google_API_Key_OPZ" translatable="false">AIzaSyAKwRE4FFyudJxNAOfAg1B9OFWSX4Mvmpw</string>
+    <!--SV-->
+    <string name="Google_API_Key_SV" translatable="false">AIzaSyD1BKx4Av0JQMjMaUHBJft3iv1yxojVy8U</string>
+
+<!--    Zamzar-->
+    <string name="Zamzar_API_Key_SV" translatable="false">MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo</string>
+
 </resources>
