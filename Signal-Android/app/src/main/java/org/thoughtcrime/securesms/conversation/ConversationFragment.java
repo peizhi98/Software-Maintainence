@@ -176,8 +176,10 @@ import org.whispersystems.libsignal.util.guava.Optional;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -191,6 +193,7 @@ import java.util.Set;
 import ezvcard.util.IOUtils;
 import kotlin.Unit;
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -887,42 +890,75 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
 //          File file = new File(uri.getPath());
 
-
+          File targetFile = File.createTempFile("temp", ".aac");
           try ( InputStream imageInFile = PartAuthority.getAttachmentStream(requireContext(), uri);) {
             // Reading a file from file system
-
             byte[] bytes = IOUtils.toByteArray(imageInFile);
-
-
-
-//            byte[] fileData = new byte[(int) file.length()];
-//            imageInFile.read(fileData);
-//            base64File = Base64.encodeBytes(bytes);
+            OutputStream os = new FileOutputStream(targetFile);
+            os.write(bytes);
+            os.close();
             base64File = Base64.encodeToString(bytes,0);
-
-
 
           } catch (FileNotFoundException e) {
             System.out.println("File not found" + e);
           } catch (IOException ioe) {
             System.out.println("Exception while reading the file " + ioe);
           }
-//          System.out.println("file uri : "+file.exists() + "  "+file.getAbsolutePath());
-          System.out.println("Path : "+uri.getPath());
-          System.out.println("base64File : "+base64File);
+          OkHttpClient client = new OkHttpClient().newBuilder()
+                  .build();
+          RequestBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
+                  .addFormDataPart("source_file",targetFile.getName(),
+                          RequestBody.create(MediaType.parse("audio/*"),targetFile))
+                  .addFormDataPart("target_format","flac")
+                  .build();
 
-//          File file = new File("C:\\Users\\jwlim\\Documents\\Software-Maintainence\\Signal-Android\\app\\sampledata\\sample-0.mp3");
-//          FileInputStream fileInputStreamReader = new FileInputStream(file);
-//          byte[] bytes = new byte[(int)file.length()];
-//          fileInputStreamReader.read(bytes);
-//          File file = new File(path);
-//          System.out.println("File exist : "+file.exists());
-//          System.out.println("File path : "+file.getAbsolutePath());
-//          byte[] buffer = new byte[(int) file.length() + 100];
-//          @SuppressWarnings("resource")
-//          int length = new FileInputStream(file).read(buffer);
-//          encodedfile = Base64.encodeToString(buffer, 0, length,
-//                  Base64.DEFAULT);
+          Request request = new Request.Builder()
+                  .url("https://api.zamzar.com/v1/jobs")
+                  .method("POST", body)
+                  .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
+                  .build();
+
+          try (Response response = client.newCall(request).execute();) {
+            String convertText = response.body().string();
+            if (convertText.isEmpty()) {
+              return "Response is empty";
+            }
+            JSONObject uploadResult = new JSONObject(convertText);
+            String id = uploadResult.getString("id");
+            String key = uploadResult.getString("key");
+
+            Request checkStatusRequest = new Request.Builder()
+                    .url("https://api.zamzar.com/v1/jobs/"+id)
+                    .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
+                    .get()
+                    .build();
+            String status = "";
+            while(true){
+              try(Response checkStatusResponse = client.newCall(checkStatusRequest).execute()){
+                JSONObject statusResult = new JSONObject(checkStatusResponse.body().string());
+                status = statusResult.getString("status");
+                if(status.equals("successful")){
+                  Request getFileRequest = new Request.Builder()
+                          .url("https://sandbox.zamzar.com/v1/files/"+id+"/content")
+                          .method("GET", null)
+                          .addHeader("Authorization", "Basic MzU0ZGE0YjhmZTgxOThkOGYyNmQ0YjhhNmYyYWI0ODE5YjBjZWVjNTo=")
+                          .build();
+                  try(Response getFileResponse = client.newCall(getFileRequest).execute();) {
+                    String fileResponse= getFileResponse.body().toString();
+                    JSONObject fileResponseJson = new JSONObject(fileResponse);
+                    String audio = fileResponseJson.getString("audio");
+                    JSONObject audioJson = new JSONObject(audio);
+                    String content = audioJson.getString("content");
+                    System.out.println(content);
+                  }
+                  break;
+                }
+              }
+            }
+
+
+
+          }
 
 
 
@@ -935,13 +971,12 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                   .put("model", "default")
           );
           MediaType JSON = MediaType.parse("application/json; charset=utf-8");
-          RequestBody body = RequestBody.create(JSON , String.valueOf(obj));
+          RequestBody transcriptBody = RequestBody.create(JSON , String.valueOf(obj));
 
           System.out.println(obj.toString());
 
-          Request request = new Request.Builder().url(url).post(body).build();
-          OkHttpClient client = new OkHttpClient();
-          try (Response response = client.newCall(request).execute()) {
+          Request transcriptRequest = new Request.Builder().url(url).post(transcriptBody).build();
+          try (Response response = client.newCall(transcriptRequest).execute()) {
 
             if (!response.isSuccessful()) {
               throw new IOException("Unexpected code " + response);
