@@ -959,7 +959,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                   .put("enableAutomaticPunctuation", true)
                   .put("encoding", "ENCODING_UNSPECIFIED")
                   .put("languageCode", "en-US")
-                  .put("alternativeLanguageCodes",new ArrayList<String>().add("zh"))
+                  .put("alternativeLanguageCodes",new JSONArray().put("zh"))
                   .put("model", "default")
           );
 
