@@ -181,9 +181,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -868,30 +870,19 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
   private void handleAudioTextConversion(ConversationMessage conversationMessage) {
     AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-//    builder.setTitle(R.string.ConversationFragment_save_to_sd_card);
 
     new ProgressDialogAsyncTask<Void, Void, String>(getActivity() , null , null)
     {
-
       @Override
       protected String doInBackground(Void... params) {
         try {
-          System.out.println("Entering GCP API call");
-//          String url = "https://random.justyy.workers.dev/api/random/?cached&n=128";
           String googleKey = getContext().getResources().getString(R.string.Google_API_Key_OPZ);
           String zamzarKey = getContext().getResources().getString(R.string.Zamzar_API_Key_SV);
           String url = "https://speech.googleapis.com/v1/speech:recognize?key="+googleKey;
-          System.out.println("API URL : "+url);
-//          String encodedfile = "";
 
           Uri uri = ((MediaMmsMessageRecord) conversationMessage.getMessageRecord()).getSlideDeck().getAudioSlide().getUri();
 
           String base64File = "";
-
-          System.out.println("has audio : "+((MediaMmsMessageRecord) conversationMessage.getMessageRecord()).getSlideDeck().getAudioSlide().hasAudio());
-
-
-//          File file = new File(uri.getPath());
 
           File targetFile = File.createTempFile("temp", ".aac");
           try ( InputStream imageInFile = PartAuthority.getAttachmentStream(requireContext(), uri);) {
@@ -901,14 +892,15 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
             os.write(bytes);
             os.close();
 
-
           } catch (FileNotFoundException e) {
             System.out.println("File not found" + e);
           } catch (IOException ioe) {
             System.out.println("Exception while reading the file " + ioe);
           }
+
           OkHttpClient client = new OkHttpClient().newBuilder()
                   .build();
+
           RequestBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
                   .addFormDataPart("source_file",targetFile.getName(),
                           RequestBody.create(MediaType.parse("audio/*"),targetFile))
@@ -927,15 +919,15 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
             if (convertText.isEmpty()) {
               return "Response is empty";
             }
+
             JSONObject uploadResult = new JSONObject(convertText);
             String id = uploadResult.getString("id");
-            String key = uploadResult.getString("key");
-
             Request checkStatusRequest = new Request.Builder()
                     .url("https://api.zamzar.com/v1/jobs/"+id)
                     .addHeader("Authorization", zamzarAuthorization)
                     .get()
                     .build();
+
             String status = "";
             while(true){
               try(Response checkStatusResponse = client.newCall(checkStatusRequest).execute()){
@@ -950,23 +942,16 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                           .addHeader("Authorization", zamzarAuthorization)
                           .build();
                   try(Response getFileResponse = client.newCall(getFileRequest).execute();) {
-                    String fileResponse= getFileResponse.body().toString();
                     BufferedSource a=getFileResponse.body().source();
                     byte[] aa=getFileResponse.body().source().readByteArray();
                     base64File = Base64.encodeToString(aa,0);
                     base64File = base64File.replace("\n", "").replace("\r", "");
-                    System.out.println("");
                   }
                   break;
                 }
               }
             }
-
-
-
           }
-
-
 
           JSONObject obj = new JSONObject();
           obj.put("audio", new JSONObject().put("content", base64File));
@@ -974,34 +959,21 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
                   .put("enableAutomaticPunctuation", true)
                   .put("encoding", "ENCODING_UNSPECIFIED")
                   .put("languageCode", "en-US")
+                  .put("alternativeLanguageCodes",new ArrayList<String>().add("zh"))
                   .put("model", "default")
           );
+
           MediaType JSON = MediaType.parse("application/json");
-          String abc=String.valueOf(obj);
-          abc = abc.replace("\n", "").replace("\r", "");
-          RequestBody transcriptBody = RequestBody.create(JSON , abc);
-//          String transcriptBodyString="{\n" +
-//                  "    \"audio\": {\n" +
-//                  "        \"content\": \""+base64File+"\"\n" +
-//                  "    },\n" +
-//                  "    \"config\": {\n" +
-//                  "        \"enableAutomaticPunctuation\": true,\n" +
-//                  "    \"encoding\": \"ENCODING_UNSPECIFIED\",\n" +
-//                  "    \"languageCode\": \"en-US\",\n" +
-//                  "    \"model\": \"default\"\n" +
-//                  "    }\n" +
-//                  "}";
-//          RequestBody transcriptBody = RequestBody.create(JSON,transcriptBodyString);
-          System.out.println(base64File);
-          System.out.println(obj.toString());
+          String objStr=String.valueOf(obj);
+          objStr = objStr.replace("\n", "").replace("\r", "");
+          RequestBody transcriptBody = RequestBody.create(JSON , objStr);
 
           Request transcriptRequest
                   = new Request.Builder()
                   .url(url)
                   .post(transcriptBody)
                   .build();
-          String a=transcriptRequest.body().toString();
-          String aa=transcriptBody.toString();
+
           try (Response response = client.newCall(transcriptRequest).execute()) {
 
             if (!response.isSuccessful()) {
@@ -1016,14 +988,13 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
             if (convertText.isEmpty()) {
               return "Response is empty";
             }
+
             JSONObject textResponse = new JSONObject(convertText);
             JSONObject resultJson=textResponse.getJSONArray("results").getJSONObject(0);
             JSONObject alternativeJson=resultJson.getJSONArray("alternatives").getJSONObject(0);
             String text=alternativeJson.getString("transcript");
             return text;
-
           }
-
         } catch (Exception e) {
           Log.w(TAG, e);
           return "Error translating";
@@ -1036,10 +1007,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
         if (!result.isEmpty()) {
             builder.setTitle("Convert message");
             builder.setCancelable(true);
-//    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
-//            count, count));
             builder.setMessage(result);
-//    builder.setPositiveButton(R.string.yes, onAcceptListener);
             builder.setPositiveButton(R.string.yes, null);
             builder.setNegativeButton(R.string.no, null);
             builder.show();
@@ -1048,16 +1016,6 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
         }
       }
     }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-
-//    builder.setTitle("Convert message");
-//    builder.setCancelable(true);
-////    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
-////            count, count));
-//    builder.setMessage("body");
-////    builder.setPositiveButton(R.string.yes, onAcceptListener);
-//    builder.setPositiveButton(R.string.yes, null);
-//    builder.setNegativeButton(R.string.no, null);
-//    builder.show();
   }
 
   private void handleDeleteMessages(final Set<MultiselectPart> multiselectParts) {
