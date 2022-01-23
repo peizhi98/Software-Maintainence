@@ -31,6 +31,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
+import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -66,13 +67,13 @@ import com.annimon.stream.Collectors;
 import com.annimon.stream.Stream;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.signal.core.util.concurrent.SignalExecutors;
 import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.LoggingFragment;
 import org.thoughtcrime.securesms.PassphraseRequiredActivity;
 import org.thoughtcrime.securesms.R;
-import org.thoughtcrime.securesms.util.JsonUtils;
-import org.thoughtcrime.securesms.verify.VerifyIdentityActivity;
 import org.thoughtcrime.securesms.components.ConversationScrollToView;
 import org.thoughtcrime.securesms.components.ConversationTypingView;
 import org.thoughtcrime.securesms.components.TooltipPopup;
@@ -164,11 +165,16 @@ import org.thoughtcrime.securesms.util.WindowUtil;
 import org.thoughtcrime.securesms.util.concurrent.SimpleTask;
 import org.thoughtcrime.securesms.util.task.ProgressDialogAsyncTask;
 import org.thoughtcrime.securesms.util.views.AdaptiveActionsToolbar;
+import org.thoughtcrime.securesms.verify.VerifyIdentityActivity;
 import org.thoughtcrime.securesms.wallpaper.ChatWallpaper;
 import org.whispersystems.libsignal.util.guava.Optional;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -176,11 +182,15 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
+import ezvcard.util.IOUtils;
 import kotlin.Unit;
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.ResponseBody;
+import okio.BufferedSource;
 
 @SuppressLint("StaticFieldLeak")
 public class ConversationFragment extends LoggingFragment implements MultiselectForwardFragment.Callback {
@@ -848,46 +858,111 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
   private void handleAudioTextConversion(ConversationMessage conversationMessage) {
     AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-//    builder.setTitle(R.string.ConversationFragment_save_to_sd_card);
-
-//    try {
-//      HttpClient httpclient = new DefaultHttpClient();
-//
-//      HttpPost post = new HttpPost("https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E");
-//      StringEntity params = new StringEntity("details=\"{\\\"audio\\\": { \\\"content\\\": \\\"\\\"},\\\"config\\\": {\\\"enableAutomaticPunctuation\\\": true,\\\"encoding\\\":\\\"ENCODING_UNSPECIFIED\\\",\\\"languageCode\\\": \\\"en-US\\\",\\\"model\\\": \\\"default\\\"}}\" ");
-//      post.setEntity(params);
-//
-//      HttpResponse response = httpclient.execute(post);
-//      StatusLine statusLine = response.getStatusLine();
-//      if(statusLine.getStatusCode() == HttpStatus.SC_OK){
-//        ByteArrayOutputStream out = new ByteArrayOutputStream();
-//        response.getEntity().writeTo(out);
-//        String responseString = out.toString();
-//        out.close();
-//        System.out.println(responseString);
-//      } else{
-//        //Closes the connection.
-//        response.getEntity().getContent().close();
-//        throw new IOException(statusLine.getReasonPhrase());
-//      }
-//    }catch (Exception e){
-//      Log.w(TAG, e);
-//    }
 
     new ProgressDialogAsyncTask<Void, Void, String>(getActivity() , null , null)
     {
-
-//      String responseString = "";
       @Override
       protected String doInBackground(Void... params) {
         try {
-          System.out.println("Entering GCP API call");
-          String url = "https://random.justyy.workers.dev/api/random/?cached&n=128";
-//          String url = "https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyDaQxLGqPwMU9WC3CQ_sdJVlsrDCpGlU-E";
+          String googleKey = getContext().getResources().getString(R.string.Google_API_Key_OPZ);
+          String zamzarKey = getContext().getResources().getString(R.string.Zamzar_API_Key_SV);
+          String url = "https://speech.googleapis.com/v1/speech:recognize?key="+googleKey;
 
-          Request request = new Request.Builder().url(url).build();
-          OkHttpClient client = new OkHttpClient();
-          try (Response response = client.newCall(request).execute()) {
+          Uri uri = ((MediaMmsMessageRecord) conversationMessage.getMessageRecord()).getSlideDeck().getAudioSlide().getUri();
+
+          String base64File = "";
+
+          File targetFile = File.createTempFile("temp", ".aac");
+          try ( InputStream imageInFile = PartAuthority.getAttachmentStream(requireContext(), uri);) {
+            // Reading a file from file system
+            byte[] bytes = IOUtils.toByteArray(imageInFile);
+            OutputStream os = new FileOutputStream(targetFile);
+            os.write(bytes);
+            os.close();
+
+          } catch (FileNotFoundException e) {
+            System.out.println("File not found" + e);
+          } catch (IOException ioe) {
+            System.out.println("Exception while reading the file " + ioe);
+          }
+
+          OkHttpClient client = new OkHttpClient().newBuilder()
+                  .build();
+
+          RequestBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
+                  .addFormDataPart("source_file",targetFile.getName(),
+                          RequestBody.create(MediaType.parse("audio/*"),targetFile))
+                  .addFormDataPart("target_format","flac")
+                  .build();
+
+          String zamzarAuthorization="Basic "+zamzarKey;
+          Request request = new Request.Builder()
+                  .url("https://api.zamzar.com/v1/jobs")
+                  .method("POST", body)
+                  .addHeader("Authorization", zamzarAuthorization)
+                  .build();
+
+          try (Response response = client.newCall(request).execute();) {
+            String convertText = response.body().string();
+            if (convertText.isEmpty()) {
+              return "Response is empty";
+            }
+
+            JSONObject uploadResult = new JSONObject(convertText);
+            String id = uploadResult.getString("id");
+            Request checkStatusRequest = new Request.Builder()
+                    .url("https://api.zamzar.com/v1/jobs/"+id)
+                    .addHeader("Authorization", zamzarAuthorization)
+                    .get()
+                    .build();
+
+            String status = "";
+            while(true){
+              try(Response checkStatusResponse = client.newCall(checkStatusRequest).execute()){
+                JSONObject statusResult = new JSONObject(checkStatusResponse.body().string());
+                status = statusResult.getString("status");
+                if(status.equals("successful")){
+                  JSONArray fileJsonArray=statusResult.getJSONArray("target_files");
+                  String fileId=fileJsonArray.getJSONObject(0).getString("id");
+                  Request getFileRequest = new Request.Builder()
+                          .url("https://sandbox.zamzar.com/v1/files/"+fileId+"/content")
+                          .method("GET", null)
+                          .addHeader("Authorization", zamzarAuthorization)
+                          .build();
+                  try(Response getFileResponse = client.newCall(getFileRequest).execute();) {
+                    BufferedSource a=getFileResponse.body().source();
+                    byte[] aa=getFileResponse.body().source().readByteArray();
+                    base64File = Base64.encodeToString(aa,0);
+                    base64File = base64File.replace("\n", "").replace("\r", "");
+                  }
+                  break;
+                }
+              }
+            }
+          }
+
+          JSONObject obj = new JSONObject();
+          obj.put("audio", new JSONObject().put("content", base64File));
+          obj.put("config", new JSONObject()
+                  .put("enableAutomaticPunctuation", true)
+                  .put("encoding", "ENCODING_UNSPECIFIED")
+                  .put("languageCode", "en-US")
+                  .put("alternativeLanguageCodes",new JSONArray().put("zh"))
+                  .put("model", "default")
+          );
+
+          MediaType JSON = MediaType.parse("application/json");
+          String objStr=String.valueOf(obj);
+          objStr = objStr.replace("\n", "").replace("\r", "");
+          RequestBody transcriptBody = RequestBody.create(JSON , objStr);
+
+          Request transcriptRequest
+                  = new Request.Builder()
+                  .url(url)
+                  .post(transcriptBody)
+                  .build();
+
+          try (Response response = client.newCall(transcriptRequest).execute()) {
 
             if (!response.isSuccessful()) {
               throw new IOException("Unexpected code " + response);
@@ -899,18 +974,19 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
 
             String convertText = response.body().string();
             if (convertText.isEmpty()) {
-              return "null";
+              return "Response is empty";
             }
 
-            return convertText;
-
+            JSONObject textResponse = new JSONObject(convertText);
+            JSONObject resultJson=textResponse.getJSONArray("results").getJSONObject(0);
+            JSONObject alternativeJson=resultJson.getJSONArray("alternatives").getJSONObject(0);
+            String text=alternativeJson.getString("transcript");
+            return text;
           }
-
-        } catch (IOException e) {
+        } catch (Exception e) {
           Log.w(TAG, e);
-          return "false";
+          return "Error translating";
         }
-
       }
 
       @Override
@@ -919,10 +995,7 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
         if (!result.isEmpty()) {
             builder.setTitle("Convert message");
             builder.setCancelable(true);
-//    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
-//            count, count));
             builder.setMessage(result);
-//    builder.setPositiveButton(R.string.yes, onAcceptListener);
             builder.setPositiveButton(R.string.yes, null);
             builder.setNegativeButton(R.string.no, null);
             builder.show();
@@ -931,16 +1004,6 @@ public class ConversationFragment extends LoggingFragment implements Multiselect
         }
       }
     }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-
-//    builder.setTitle("Convert message");
-//    builder.setCancelable(true);
-////    builder.setMessage(getActivity().getResources().getQuantityString(R.plurals.ConversationFragment_saving_n_media_to_storage_warning,
-////            count, count));
-//    builder.setMessage("body");
-////    builder.setPositiveButton(R.string.yes, onAcceptListener);
-//    builder.setPositiveButton(R.string.yes, null);
-//    builder.setNegativeButton(R.string.no, null);
-//    builder.show();
   }
 
   private void handleDeleteMessages(final Set<MultiselectPart> multiselectParts) {
